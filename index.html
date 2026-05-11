@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>坦克大战 - Tank Battle</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  user-select: none;
+  overflow: hidden;
+}
+.game-wrapper {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 20px;
+  background: linear-gradient(145deg, #16213e, #0f3460);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 0 60px rgba(0,150,255,0.05);
+  border: 2px solid rgba(100,200,255,0.15);
+}
+.canvas-container {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 30px rgba(0,150,255,0.2);
+  border: 2px solid rgba(100,200,255,0.3);
+}
+#gameCanvas {
+  display: block;
+  background: #2d2d2d;
+  width: 624px;
+  height: 624px;
+  image-rendering: pixelated;
+}
+.sidebar {
+  width: 180px;
+  padding: 20px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(100,200,255,0.15);
+  color: #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sidebar .title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 20px rgba(255,215,0,0.3);
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  letter-spacing: 4px;
+}
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 14px;
+}
+.stat-item .label { color: #aaa; }
+.stat-item .value {
+  color: #fff;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+.stat-item .value.score { color: #ffd700; }
+.stat-item .value.lives { color: #4caf50; }
+.stat-item .value.wave { color: #42a5f5; }
+.stat-item .value.enemies { color: #ef5350; }
+.controls {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.controls div {
+  font-size: 12px;
+  color: #888;
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.controls kbd {
+  display: inline-block;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #ccc;
+  font-family: inherit;
+  min-width: 20px;
+  text-align: center;
+}
+.overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.overlay.show { opacity: 1; pointer-events: auto; }
+.overlay h1 {
+  font-size: 42px;
+  color: #ffd700;
+  text-shadow: 0 0 30px rgba(255,215,0,0.5);
+  margin-bottom: 10px;
+  letter-spacing: 6px;
+}
+.overlay .sub {
+  font-size: 16px;
+  color: #aaa;
+  margin-bottom: 8px;
+}
+.overlay .blink {
+  animation: blink 1s ease-in-out infinite;
+  font-size: 18px;
+  color: #42a5f5;
+  margin-top: 20px;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.overlay .final-score {
+  font-size: 24px;
+  color: #ffd700;
+  margin: 10px 0;
+}
+</style>
+</head>
+<body>
+
+<div class="game-wrapper">
+  <div class="canvas-container">
+    <canvas id="gameCanvas" width="624" height="624"></canvas>
+    <div class="overlay show" id="startOverlay">
+      <h1>坦克大战</h1>
+      <div class="sub">TANK BATTLE</div>
+      <div style="margin:15px 0;font-size:14px;color:#888;line-height:2;text-align:center;">
+        保护你的基地<br>消灭所有敌军坦克
+      </div>
+      <div class="blink" id="startBlink">按 ENTER 开始游戏</div>
+    </div>
+    <div class="overlay" id="gameOverOverlay">
+      <h1 id="gameOverTitle">GAME OVER</h1>
+      <div class="final-score" id="finalScore">得分: 0</div>
+      <div style="font-size:14px;color:#888;" id="waveReached">到达第 1 关</div>
+      <div class="blink">按 ENTER 重新开始</div>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="title">坦克大战</div>
+    <div class="stat-item"><span class="label">得分</span><span class="value score" id="scoreDisplay">0</span></div>
+    <div class="stat-item"><span class="label">生命</span><span class="value lives" id="livesDisplay">3</span></div>
+    <div class="stat-item"><span class="label">关卡</span><span class="value wave" id="waveDisplay">1</span></div>
+    <div class="stat-item"><span class="label">剩余敌军</span><span class="value enemies" id="enemiesDisplay">0</span></div>
+    <div class="controls">
+      <div><kbd>&#8593;</kbd><kbd>&#8595;</kbd><kbd>&#8592;</kbd><kbd>&#8594;</kbd> 移动</div>
+      <div><kbd>SPACE</kbd> 射击</div>
+      <div><kbd>ENTER</kbd> 开始</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== CONSTANTS ====================
+const TILE = 24;
+const COLS = 26;
+const ROWS = 26;
+const CW = COLS * TILE;  // 624
+const CH = ROWS * TILE;  // 624
+const TANK_SIZE = 40;
+const HALF_TANK = TANK_SIZE / 2;
+const BULLET_SIZE = 8;
+const HALF_BULLET = BULLET_SIZE / 2;
+const PLAYER_SPEED = 1.8;
+const PLAYER_SHOOT_CD = 350;
+const BASE_POS = { x: 12, y: 24 }; // 2x2 base top-left tile
+
+const UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3;
+const DIR_DX = [0, 1, 0, -1];
+const DIR_DY = [-1, 0, 1, 0];
+
+// ==================== STATE ====================
+let canvas, ctx;
+let game, player, enemies, bullets, particles, map;
+let keys = {};
+let score = 0, lives = 3, wave = 0;
+let enemiesRemaining = 0, enemiesOnScreen = 0, maxOnScreen = 4;
+let gameState = 'start'; // 'start' | 'playing' | 'gameover'
+let frameCount = 0;
+let waveDelay = 0;
+let spawnTimer = 0;
+let spawnQueue = []; // number of enemies to spawn
+let animId = null;
+let audioCtx = null;
+
+// DOM refs
+const scoreDisp = document.getElementById('scoreDisplay');
+const livesDisp = document.getElementById('livesDisplay');
+const waveDisp = document.getElementById('waveDisplay');
+const enemiesDisp = document.getElementById('enemiesDisplay');
+const startOverlay = document.getElementById('startOverlay');
+const gameOverOverlay = document.getElementById('gameOverOverlay');
+const gameOverTitle = document.getElementById('gameOverTitle');
+const finalScore = document.getElementById('finalScore');
+const waveReached = document.getElementById('waveReached');
+
+// ==================== AUDIO ====================
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime;
+
+    switch (type) {
+      case 'shoot':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, t);
+        osc.frequency.exponentialRampToValueAtTime(200, t + 0.08);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        osc.start(t); osc.stop(t + 0.08);
+        break;
+      case 'explode':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+        gain.gain.setValueAtTime(0.25, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.start(t); osc.stop(t + 0.35);
+        break;
+      case 'gameover':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, t);
+        osc.frequency.exponentialRampToValueAtTime(80, t + 1.0);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+        osc.start(t); osc.stop(t + 1.0);
+        break;
+      case 'win':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523, t);
+        osc.frequency.setValueAtTime(659, t + 0.15);
+        osc.frequency.setValueAtTime(784, t + 0.3);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        osc.start(t); osc.stop(t + 0.5);
+        break;
+      case 'hit':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+        osc.start(t); osc.stop(t + 0.05);
+        break;
+    }
+  } catch(e) {}
+}
+
+// ==================== MAP GENERATION ====================
+function createEmptyMap() {
+  return Array.from({length: ROWS}, () => Array(COLS).fill(0));
+}
+
+function generateMap(level) {
+  const map = createEmptyMap();
+
+  // Place base (2x2 eagle at bottom center)
+  map[BASE_POS.y][BASE_POS.x] = 3;
+  map[BASE_POS.y][BASE_POS.x + 1] = 3;
+  map[BASE_POS.y + 1][BASE_POS.x] = 3;
+  map[BASE_POS.y + 1][BASE_POS.x + 1] = 3;
+
+  // Brick walls around base (U-shape, leave bottom open)
+  const bx = BASE_POS.x, by = BASE_POS.y;
+  for (let i = -2; i <= 3; i++) {
+    if (i >= 0 && i <= 1) continue; // gap over the base
+    const wx = bx + i;
+    if (wx >= 0 && wx < COLS) map[by - 1][wx] = 1;
+  }
+  for (let j = 0; j <= 1; j++) {
+    const wy = by + j;
+    if (wy >= 0 && wy < ROWS) {
+      if (bx - 2 >= 0) map[wy][bx - 2] = 1;
+      if (bx + 3 < COLS) map[wy][bx + 3] = 1;
+    }
+  }
+
+  // Structural wall patterns
+  const patterns = [
+    // horizontal lines
+    { w: 4, h: 1 }, { w: 5, h: 1 }, { w: 3, h: 1 },
+    // vertical lines
+    { w: 1, h: 4 }, { w: 1, h: 3 },
+    // 2x2 blocks
+    { w: 2, h: 2 }, { w: 2, h: 2 },
+    // L-shape (represented as 2x2 block at offset)
+  ];
+
+  const density = Math.min(0.18 + level * 0.025, 0.38);
+
+  // Place wall structures
+  const wallCount = Math.floor(density * COLS * ROWS / 4);
+  for (let i = 0; i < wallCount; i++) {
+    const patIdx = Math.floor(Math.random() * patterns.length);
+    const pat = patterns[patIdx];
+    let x = Math.floor(Math.random() * (COLS - pat.w + 1));
+    let y = Math.floor(Math.random() * (ROWS - pat.h + 1));
+
+    // Don't place in spawn zones or base area
+    if (isBlockedArea(x, y, pat.w, pat.h)) continue;
+
+    for (let dy = 0; dy < pat.h; dy++) {
+      for (let dx = 0; dx < pat.w; dx++) {
+        if (map[y + dy][x + dx] === 0) {
+          map[y + dy][x + dx] = 1;
+        }
+      }
+    }
+  }
+
+  // Place steel walls (levels 3+)
+  if (level >= 3) {
+    const steelCount = Math.min(4 + (level - 3) * 2, 15);
+    for (let i = 0; i < steelCount; i++) {
+      let x = Math.floor(Math.random() * (COLS - 2));
+      let y = Math.floor(Math.random() * (ROWS - 2));
+      if (isBlockedArea(x, y, 2, 2)) continue;
+      if (map[y][x] === 0 && map[y+1][x] === 0 && map[y][x+1] === 0 && map[y+1][x+1] === 0) {
+        map[y][x] = 2;
+        map[y+1][x] = 2;
+        map[y][x+1] = 2;
+        map[y+1][x+1] = 2;
+      }
+    }
+  }
+
+  // Finally, ensure spawn points are clear
+  clearSpawnAreas(map);
+
+  return map;
+}
+
+function isBlockedArea(x, y, w, h) {
+  // Enemy spawn zones (top row)
+  if (y < 2) return true;
+  // Player spawn
+  if (y >= 23 && x >= 6 && x <= 11) return true;
+  if (y >= 23 && x >= 14 && x <= 19) return true;
+  // Base area
+  if (y >= BASE_POS.y - 3 && y <= BASE_POS.y + 2 && x >= BASE_POS.x - 3 && x <= BASE_POS.x + 4) return true;
+  // Near enemy spawn points
+  if (y < 4 && x < 4) return true;
+  if (y < 4 && x >= COLS - 4) return true;
+  if (y < 4 && x >= 11 && x <= 14) return true;
+  return false;
+}
+
+function clearSpawnAreas(map) {
+  const spawns = getEnemySpawnPoints();
+  for (const s of spawns) {
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        const sy = s.y + dy, sx = s.x + dx;
+        if (sy < ROWS && sx < COLS) map[sy][sx] = 0;
+      }
+    }
+  }
+  // Player spawn
+  for (let dy = 0; dy < 2; dy++)
+    for (let dx = 0; dx < 2; dx++)
+      map[24 + dy][8 + dx] = 0;
+}
+
+function getEnemySpawnPoints() {
+  return [
+    { x: 0, y: 0 },
+    { x: 12, y: 0 },
+    { x: 24, y: 0 }
+  ];
+}
+
+// ==================== COLLISION HELPERS ====================
+function rectCollide(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function isWallCollision(x, y, size, map) {
+  const half = size / 2;
+  const left = x - half, right = x + half;
+  const top = y - half, bottom = y + half;
+  const startCol = Math.max(0, Math.floor(left / TILE));
+  const endCol = Math.min(COLS - 1, Math.floor((right - 1) / TILE));
+  const startRow = Math.max(0, Math.floor(top / TILE));
+  const endRow = Math.min(ROWS - 1, Math.floor((bottom - 1) / TILE));
+
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      if (map[r][c] === 1 || map[r][c] === 2 || map[r][c] === 3) {
+        const wx = c * TILE, wy = r * TILE;
+        if (rectCollide(left, top, size, size, wx, wy, TILE, TILE)) {
+          return { hit: true, tile: map[r][c], row: r, col: c };
+        }
+      }
+    }
+  }
+  return { hit: false };
+}
+
+function tankTankCollision(t1, t2) {
+  return rectCollide(t1.x - HALF_TANK, t1.y - HALF_TANK, TANK_SIZE, TANK_SIZE,
+                     t2.x - HALF_TANK, t2.y - HALF_TANK, TANK_SIZE, TANK_SIZE);
+}
+
+// ==================== TANK CLASS ====================
+class Tank {
+  constructor(x, y, dir, isPlayer) {
+    this.x = x;
+    this.y = y;
+    this.dir = dir;
+    this.isPlayer = isPlayer;
+    this.size = TANK_SIZE;
+    this.speed = isPlayer ? PLAYER_SPEED : 0.6;
+    this.shootCD = isPlayer ? PLAYER_SHOOT_CD : 1800;
+    this.lastShot = 0;
+    this.alive = true;
+    this.moveDir = dir;
+    this.w = TANK_SIZE;
+    this.h = TANK_SIZE;
+
+    // Enemy AI
+    this.aiTimer = 0;
+    this.aiChangeInterval = 1500 + Math.random() * 1500;
+
+    // Spawn flash
+    this.spawnTime = Date.now();
+    this.invincible = true;
+
+    if (isPlayer) {
+      this.hp = 1;
+      this.respawnX = x;
+      this.respawnY = y;
+    }
+  }
+
+  get cx() { return this.x; }
+  get cy() { return this.y; }
+
+  setDirection(dir) {
+    if (dir === this.dir) return;
+    this.dir = dir;
+    this.moveDir = dir;
+  }
+
+  tryMove(dx, dy, map, tanks) {
+    const newX = this.x + dx;
+    const newY = this.y + dy;
+
+    // Bounds check
+    if (newX - HALF_TANK < 0 || newX + HALF_TANK > CW ||
+        newY - HALF_TANK < 0 || newY + HALF_TANK > CH) {
+      return false;
+    }
+
+    // Wall collision
+    const wallHit = isWallCollision(newX, newY, TANK_SIZE, map);
+    if (wallHit.hit) return false;
+
+    // Tank collision
+    for (const t of tanks) {
+      if (t === this || !t.alive) continue;
+      if (rectCollide(newX - HALF_TANK, newY - HALF_TANK, TANK_SIZE, TANK_SIZE,
+                      t.x - HALF_TANK, t.y - HALF_TANK, TANK_SIZE, TANK_SIZE)) {
+        return false;
+      }
+    }
+
+    this.x = newX;
+    this.y = newY;
+    return true;
+  }
+
+  shoot(bullets) {
+    const now = Date.now();
+    if (now - this.lastShot < this.shootCD) return;
+    this.lastShot = now;
+
+    const bx = this.x + DIR_DX[this.dir] * (HALF_TANK + 2);
+    const by = this.y + DIR_DY[this.dir] * (HALF_TANK + 2);
+    bullets.push(new Bullet(bx, by, this.dir, this.isPlayer));
+    if (!this.isPlayer) playSound('shoot');
+  }
+
+  draw(ctx) {
+    if (!this.alive) return;
+
+    // Spawn flash
+    if (this.invincible) {
+      const elapsed = Date.now() - this.spawnTime;
+      if (elapsed > 2000) {
+        this.invincible = false;
+      } else if (Math.floor(elapsed / 100) % 2 === 0) {
+        // Flash - don't draw
+        return;
+      }
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    const s = TANK_SIZE;
+    const h = s / 2;
+
+    // Colors
+    const bodyColor = this.isPlayer ? '#4a7a4a' : '#7a3a3a';
+    const trackColor = this.isPlayer ? '#3a5a3a' : '#5a2a2a';
+    const turretColor = this.isPlayer ? '#5a9a5a' : '#9a4a4a';
+    const barrelColor = '#555';
+    const accentColor = this.isPlayer ? '#6aba6a' : '#ba5a5a';
+
+    // Tracks (left and right)
+    ctx.fillStyle = trackColor;
+    const trackW = 6;
+    ctx.fillRect(-h, -h, trackW, s); // left track
+    ctx.fillRect(h - trackW, -h, trackW, s); // right track
+    // Track details
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for (let i = 0; i < 4; i++) {
+      const ty = -h + 4 + i * (s - 8) / 3;
+      ctx.fillRect(-h + 1, ty, trackW - 2, 3);
+      ctx.fillRect(h - trackW + 1, ty, trackW - 2, 3);
+    }
+
+    // Body
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-h + trackW, -h + 2, s - trackW * 2, s - 4);
+
+    // Body highlight
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(-h + trackW + 2, -h + 4, s - trackW * 2 - 4, 3);
+
+    // Turret (circle in center square)
+    ctx.fillStyle = turretColor;
+    const turretSize = 16;
+    ctx.fillRect(-turretSize/2, -turretSize/2, turretSize, turretSize);
+
+    // Turret top highlight
+    ctx.fillStyle = this.isPlayer ? '#7acc7a' : '#cc7a7a';
+    ctx.fillRect(-turretSize/2 + 2, -turretSize/2 + 2, turretSize - 4, turretSize - 4);
+
+    // Barrel
+    ctx.fillStyle = barrelColor;
+    const barrelLen = 12;
+    const barrelW = 5;
+    switch (this.dir) {
+      case UP: ctx.fillRect(-barrelW/2, -h - 4, barrelW, barrelLen + 4); break;
+      case DOWN: ctx.fillRect(-barrelW/2, h - barrelLen, barrelW, barrelLen + 4); break;
+      case LEFT: ctx.fillRect(-h - 4, -barrelW/2, barrelLen + 4, barrelW); break;
+      case RIGHT: ctx.fillRect(h - barrelLen, -barrelW/2, barrelLen + 4, barrelW); break;
+    }
+
+    // Barrel tip
+    ctx.fillStyle = '#888';
+    switch (this.dir) {
+      case UP: ctx.fillRect(-barrelW/2 - 1, -h - 4, barrelW + 2, 4); break;
+      case DOWN: ctx.fillRect(-barrelW/2 - 1, h + 2, barrelW + 2, 4); break;
+      case LEFT: ctx.fillRect(-h - 4, -barrelW/2 - 1, 4, barrelW + 2); break;
+      case RIGHT: ctx.fillRect(h + 2, -barrelW/2 - 1, 4, barrelW + 2); break;
+    }
+
+    ctx.restore();
+  }
+}
+
+// ==================== BULLET CLASS ====================
+class Bullet {
+  constructor(x, y, dir, isPlayer) {
+    this.x = x;
+    this.y = y;
+    this.dir = dir;
+    this.isPlayer = isPlayer;
+    this.speed = isPlayer ? 4 : 2.5;
+    this.size = BULLET_SIZE;
+    this.alive = true;
+  }
+
+  update(map, bullets, tanks, player) {
+    if (!this.alive) return;
+
+    const dx = DIR_DX[this.dir] * this.speed;
+    const dy = DIR_DY[this.dir] * this.speed;
+    this.x += dx;
+    this.y += dy;
+
+    // Bounds check
+    if (this.x < 0 || this.x > CW || this.y < 0 || this.y > CH) {
+      this.alive = false;
+      return;
+    }
+
+    // Wall collision
+    const col = Math.floor(this.x / TILE);
+    const row = Math.floor(this.y / TILE);
+    if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+      const tile = map[row][col];
+      if (tile === 1) {
+        map[row][col] = 0;
+        this.alive = false;
+        addExplosion(col * TILE + TILE/2, row * TILE + TILE/2, 8);
+        playSound('hit');
+        return;
+      }
+      if (tile === 2) {
+        this.alive = false;
+        playSound('hit');
+        return;
+      }
+      if (tile === 3) {
+        // Base hit!
+        map[row][col] = 0;
+        this.alive = false;
+        addExplosion(col * TILE + TILE/2, row * TILE + TILE/2, 20);
+        playSound('explode');
+        gameOver(false);
+        return;
+      }
+    }
+
+    // Hit tanks
+    for (const t of tanks) {
+      if (!t.alive) continue;
+      if (this.isPlayer && t.isPlayer) continue;
+      if (!this.isPlayer && !t.isPlayer) continue;
+
+      if (Math.abs(this.x - t.x) < HALF_TANK + 4 && Math.abs(this.y - t.y) < HALF_TANK + 4) {
+        this.alive = false;
+        if (this.isPlayer) {
+          // Hit an enemy
+          t.alive = false;
+          addExplosion(t.x, t.y, 16);
+          playSound('explode');
+          score += 100;
+          updateUI();
+          enemiesRemaining--;
+          enemiesOnScreen--;
+        } else {
+          // Hit the player
+          if (t.invincible) return;
+          t.alive = false;
+          addExplosion(t.x, t.y, 16);
+          playSound('explode');
+          playerDie();
+        }
+        return;
+      }
+    }
+
+    // Bullet vs bullet
+    for (const b of bullets) {
+      if (b === this || !b.alive) continue;
+      if (this.isPlayer === b.isPlayer) continue;
+      if (Math.abs(this.x - b.x) < 8 && Math.abs(this.y - b.y) < 8) {
+        this.alive = false;
+        b.alive = false;
+        addExplosion((this.x + b.x) / 2, (this.y + b.y) / 2, 6);
+        return;
+      }
+    }
+  }
+
+  draw(ctx) {
+    if (!this.alive) return;
+    ctx.fillStyle = this.isPlayer ? '#ffeb3b' : '#ff5722';
+    ctx.shadowColor = this.isPlayer ? '#ffeb3b' : '#ff5722';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, HALF_BULLET, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Trail
+    ctx.fillStyle = 'rgba(255,255,200,0.3)';
+    ctx.beginPath();
+    ctx.arc(this.x - DIR_DX[this.dir] * 4, this.y - DIR_DY[this.dir] * 4, HALF_BULLET * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ==================== PARTICLES ====================
+let particles = [];
+
+function addExplosion(x, y, size) {
+  const count = 12 + Math.floor(size);
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    const life = 20 + Math.random() * 30;
+    const pSize = 2 + Math.random() * (size / 4);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life, maxLife: life,
+      size: pSize,
+      color: Math.random() > 0.5 ? '#ff6b35' : (Math.random() > 0.5 ? '#ffd700' : '#fff')
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles(ctx) {
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 10;
+    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ==================== DRAW MAP ====================
+function drawMap(ctx, map) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const tile = map[r][c];
+      const x = c * TILE, y = r * TILE;
+      if (tile === 0) continue;
+
+      if (tile === 1) {
+        // Brick wall
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#A0522D';
+        ctx.fillRect(x + 2, y + 2, TILE/2 - 3, TILE/2 - 3);
+        ctx.fillRect(x + TILE/2 + 1, y + 2, TILE/2 - 3, TILE/2 - 3);
+        ctx.fillRect(x + 2, y + TILE/2 + 1, TILE/2 - 3, TILE/2 - 3);
+        ctx.fillRect(x + TILE/2 + 1, y + TILE/2 + 1, TILE/2 - 3, TILE/2 - 3);
+        ctx.strokeStyle = '#6B3410';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x, y, TILE, TILE);
+        ctx.strokeRect(x + TILE/2, y, 0, TILE);
+        ctx.strokeRect(x, y + TILE/2, TILE, 0);
+      } else if (tile === 2) {
+        // Steel wall
+        ctx.fillStyle = '#999';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#bbb';
+        ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+        ctx.fillStyle = '#777';
+        ctx.fillRect(x + 4, y + 4, 4, TILE - 8);
+        ctx.fillRect(x + TILE - 8, y + 4, 4, TILE - 8);
+        ctx.fillRect(x + 4, y + TILE/2 - 2, TILE - 8, 4);
+        // Rivets
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.arc(x + 4, y + 4, 2, 0, Math.PI*2);
+        ctx.arc(x + TILE - 4, y + 4, 2, 0, Math.PI*2);
+        ctx.arc(x + 4, y + TILE - 4, 2, 0, Math.PI*2);
+        ctx.arc(x + TILE - 4, y + TILE - 4, 2, 0, Math.PI*2);
+        ctx.fill();
+      } else if (tile === 3) {
+        // Base / Eagle
+        const cx = x + TILE/2, cy = y + TILE/2;
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 8;
+        // Draw eagle shape
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 6);
+        ctx.lineTo(cx + 6, cy + 4);
+        ctx.lineTo(cx + 2, cy + 4);
+        ctx.lineTo(cx + 2, cy + 8);
+        ctx.lineTo(cx - 2, cy + 8);
+        ctx.lineTo(cx - 2, cy + 4);
+        ctx.lineTo(cx - 6, cy + 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Flag pole
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(cx - 1, cy - 10, 2, 14);
+        // Flag
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(cx + 1, cy - 10, 5, 4);
+      }
+    }
+  }
+}
+
+// ==================== GAME LOGIC ====================
+function startGame() {
+  score = 0;
+  lives = 3;
+  wave = 0;
+  enemies = [];
+  bullets = [];
+  particles = [];
+  gameState = 'playing';
+  startOverlay.classList.remove('show');
+  gameOverOverlay.classList.remove('show');
+  updateUI();
+  nextWave();
+}
+
+function nextWave() {
+  wave++;
+  map = generateMap(wave);
+  enemies = [];
+  bullets = [];
+  particles = [];
+
+  const totalEnemies = 6 + wave * 3;
+  enemiesRemaining = totalEnemies;
+  enemiesOnScreen = 0;
+  spawnQueue = new Array(totalEnemies).fill(0);
+  spawnTimer = 0;
+  waveDelay = 60;
+
+  // Create player
+  const px = 8 * TILE + TILE;
+  const py = 24 * TILE + TILE;
+  player = new Tank(px, py, UP, true);
+  player.speed = PLAYER_SPEED;
+  player.shootCD = PLAYER_SHOOT_CD;
+
+  updateUI();
+}
+
+function spawnEnemy() {
+  if (spawnQueue.length === 0 || enemiesOnScreen >= maxOnScreen) return;
+
+  const spawnPoints = getEnemySpawnPoints();
+  const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+  const ex = sp.x * TILE + TILE;
+  const ey = sp.y * TILE + TILE;
+
+  // Check no tank at spawn point
+  const allTanks = [player, ...enemies].filter(t => t.alive);
+  for (const t of allTanks) {
+    if (Math.abs(t.x - ex) < TANK_SIZE && Math.abs(t.y - ey) < TANK_SIZE) return;
+  }
+
+  spawnQueue.pop();
+  const dir = DOWN;
+  const enemy = new Tank(ex, ey, dir, false);
+
+  // Difficulty scaling
+  enemy.speed = 0.5 + Math.min(wave * 0.05, 0.8);
+  enemy.shootCD = Math.max(1800 - wave * 80, 800);
+  enemy.aiChangeInterval = Math.max(1500 - wave * 80, 600) + Math.random() * 800;
+
+  enemies.push(enemy);
+  enemiesOnScreen++;
+}
+
+function playerDie() {
+  lives--;
+  updateUI();
+  if (lives <= 0) {
+    gameOver(true);
+    return;
+  }
+  // Respawn player
+  setTimeout(() => {
+    if (gameState !== 'playing') return;
+    const px = 8 * TILE + TILE;
+    const py = 24 * TILE + TILE;
+    player = new Tank(px, py, UP, true);
+    player.speed = PLAYER_SPEED;
+    player.shootCD = PLAYER_SHOOT_CD;
+  }, 1000);
+}
+
+function gameOver(playSoundEffect) {
+  gameState = 'gameover';
+  if (playSoundEffect) playSound('gameover');
+  gameOverTitle.textContent = lives <= 0 ? 'GAME OVER' : '基地被毁!';
+  finalScore.textContent = `得分: ${score}`;
+  waveReached.textContent = `到达第 ${wave} 关`;
+  gameOverOverlay.classList.add('show');
+}
+
+function checkWaveComplete() {
+  if (spawnQueue.length === 0 && enemiesRemaining <= 0 && enemies.every(e => !e.alive)) {
+    playSound('win');
+    setTimeout(() => {
+      if (gameState === 'playing') nextWave();
+    }, 1500);
+  }
+}
+
+function updateUI() {
+  scoreDisp.textContent = score;
+  livesDisp.textContent = lives;
+  waveDisp.textContent = wave;
+  enemiesDisp.textContent = enemiesRemaining > 0 ? enemiesRemaining : 0;
+}
+
+// ==================== ENEMY AI ====================
+function updateAI(enemy, dt, map, allTanks) {
+  if (!enemy.alive) return;
+
+  enemy.aiTimer += dt;
+
+  // Change direction periodically
+  if (enemy.aiTimer >= enemy.aiChangeInterval) {
+    enemy.aiTimer = 0;
+    enemy.aiChangeInterval = (Math.max(1500 - wave * 80, 600) + Math.random() * 800) * (0.8 + Math.random() * 0.4);
+    // Sometimes move toward player/base
+    if (Math.random() < 0.3 && player && player.alive) {
+      const dx = player.x - enemy.x;
+      const dy = player.y - enemy.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        enemy.dir = dx > 0 ? RIGHT : LEFT;
+      } else {
+        enemy.dir = dy > 0 ? DOWN : UP;
+      }
+    } else {
+      const dirs = [UP, DOWN, LEFT, RIGHT];
+      enemy.dir = dirs[Math.floor(Math.random() * 4)];
+    }
+    enemy.moveDir = enemy.dir;
+  }
+
+  // Try to move
+  const dx = DIR_DX[enemy.moveDir] * enemy.speed;
+  const dy = DIR_DY[enemy.moveDir] * enemy.speed;
+
+  if (dx !== 0 || dy !== 0) {
+    const moved = enemy.tryMove(dx, dy, map, allTanks);
+    if (!moved) {
+      // Hit something, change direction
+      const dirs = [UP, DOWN, LEFT, RIGHT].filter(d => d !== enemy.dir);
+      enemy.dir = dirs[Math.floor(Math.random() * dirs.length)];
+      enemy.moveDir = enemy.dir;
+      enemy.aiTimer = enemy.aiChangeInterval * 0.7;
+    }
+  }
+
+  // Shoot
+  const now = Date.now();
+  if (now - enemy.lastShot > enemy.shootCD) {
+    enemy.shoot(bullets);
+  }
+}
+
+// ==================== MAIN GAME LOOP ====================
+function update(dt) {
+  if (gameState !== 'playing') return;
+
+  frameCount++;
+
+  // Wave delay
+  if (waveDelay > 0) {
+    waveDelay--;
+    return;
+  }
+
+  // Spawn enemies
+  if (spawnQueue.length > 0) {
+    spawnTimer += dt;
+    if (spawnTimer > 2000) {
+      spawnTimer = 0;
+      spawnEnemy();
+    }
+  }
+
+  // ===== Player movement =====
+  if (player && player.alive) {
+    let moving = false;
+    if (keys['ArrowUp'] || keys['KeyW']) {
+      player.setDirection(UP);
+      moving = true;
+    } else if (keys['ArrowDown'] || keys['KeyS']) {
+      player.setDirection(DOWN);
+      moving = true;
+    } else if (keys['ArrowLeft'] || keys['KeyA']) {
+      player.setDirection(LEFT);
+      moving = true;
+    } else if (keys['ArrowRight'] || keys['KeyD']) {
+      player.setDirection(RIGHT);
+      moving = true;
+    }
+
+    if (moving) {
+      const dx = DIR_DX[player.dir] * player.speed;
+      const dy = DIR_DY[player.dir] * player.speed;
+      const allTanks = [player, ...enemies].filter(t => t.alive);
+      player.tryMove(dx, dy, map, allTanks);
+    }
+
+    // Player shoot
+    if (keys['Space']) {
+      player.shoot(bullets);
+    }
+  }
+
+  // ===== Update AI =====
+  const allTanks = [player, ...enemies].filter(t => t.alive);
+  for (const enemy of enemies) {
+    updateAI(enemy, dt, map, allTanks);
+  }
+
+  // ===== Update bullets =====
+  for (const b of bullets) {
+    b.update(map, bullets, allTanks, player);
+  }
+  bullets = bullets.filter(b => b.alive);
+
+  // ===== Remove dead enemies =====
+  enemies = enemies.filter(e => e.alive);
+
+  // ===== Update particles =====
+  updateParticles();
+
+  // ===== Check wave complete =====
+  checkWaveComplete();
+}
+
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Background grid
+  ctx.fillStyle = '#2d2d2d';
+  ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath();
+    ctx.moveTo(0, r * TILE);
+    ctx.lineTo(CW, r * TILE);
+    ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath();
+    ctx.moveTo(c * TILE, 0);
+    ctx.lineTo(c * TILE, CH);
+    ctx.stroke();
+  }
+
+  // Draw map
+  drawMap(ctx, map);
+
+  // Draw tanks
+  if (player && player.alive) player.draw(ctx);
+  for (const enemy of enemies) {
+    if (enemy.alive) enemy.draw(ctx);
+  }
+
+  // Draw bullets
+  for (const b of bullets) {
+    b.draw(ctx);
+  }
+
+  // Draw particles
+  drawParticles(ctx);
+}
+
+function gameLoop(timestamp) {
+  if (!game.lastTimestamp) game.lastTimestamp = timestamp;
+  const dt = Math.min(timestamp - game.lastTimestamp, 33);
+  game.lastTimestamp = timestamp;
+
+  update(dt);
+  render();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+// ==================== INPUT ====================
+document.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+
+  if (e.code === 'Enter') {
+    if (gameState === 'start') {
+      getAudioCtx().resume();
+      startGame();
+    } else if (gameState === 'gameover') {
+      startGame();
+    }
+  }
+
+  // Prevent scrolling with arrow keys
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+// ==================== INIT ====================
+canvas = document.getElementById('gameCanvas');
+ctx = canvas.getContext('2d');
+
+game = {
+  lastTimestamp: 0,
+};
+
+// Initial state
+enemies = [];
+bullets = [];
+particles = [];
+map = generateMap(1);
+player = null;
+
+// Start the loop
+requestAnimationFrame(gameLoop);
+
+// Reset audio context on any click (autoplay policy)
+document.addEventListener('click', () => getAudioCtx().resume());
+</script>
+</body>
+</html>
