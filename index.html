@@ -223,13 +223,23 @@ const waveReached = document.getElementById('waveReached');
 
 // ==================== AUDIO ====================
 function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
+  try {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+    }
+    return audioCtx;
+  } catch(e) {
+    audioCtx = null;
+    return null;
+  }
 }
 
 function playSound(type) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
   try {
-    const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -1106,16 +1116,21 @@ function gameLoop(timestamp) {
 }
 
 // ==================== INPUT ====================
+function handleEnter() {
+  if (gameState === 'start') {
+    const ctx = getAudioCtx();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    startGame();
+  } else if (gameState === 'gameover') {
+    startGame();
+  }
+}
+
 document.addEventListener('keydown', (e) => {
   keys[e.code] = true;
 
   if (e.code === 'Enter') {
-    if (gameState === 'start') {
-      getAudioCtx().resume();
-      startGame();
-    } else if (gameState === 'gameover') {
-      startGame();
-    }
+    handleEnter();
   }
 
   // Prevent scrolling with arrow keys
@@ -1127,6 +1142,9 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => {
   keys[e.code] = false;
 });
+
+// Click to start as fallback
+startOverlay.addEventListener('click', handleEnter);
 
 // ==================== INIT ====================
 canvas = document.getElementById('gameCanvas');
@@ -1146,8 +1164,11 @@ player = null;
 // Start the loop
 requestAnimationFrame(gameLoop);
 
-// Reset audio context on any click (autoplay policy)
-document.addEventListener('click', () => getAudioCtx().resume());
+// Wake audio on any click
+document.addEventListener('click', () => {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') ctx.resume();
+});
 </script>
 </body>
 </html>
